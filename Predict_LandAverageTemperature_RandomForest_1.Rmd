@@ -1,0 +1,247 @@
+  Hi All, I am new to R & programming and this is my first work after the titanic dataset study. I should mention that this would not have been possible without the tons of help from lot of websites related to R. The questions answer sessions were quite useful, with any error that blocked in my work, the answers/suggestions were readily available in different perspectives from various discussions around the world. Thanks to internet and the sources.
+  Basically from Environmental, Remote Sensing and GIS background, I was captivated by Data Science, Big Data concepts and thatshow I landed here at Kaggle with R. "Climate Change: Earth Surface Temperature Data" interested me to take up for my first study. I have tried forecasting the Global Land Average temperature for next fifty years starting from 2015. Sure there is requirement for lot of improvement in this study from a knowledgeable persons view,there might be errors in code or need for better logic/code.  Requesting you all to review and share your valuable suggestions, it will definitely make my life better. Thanks for your time.
+  
+Climate Change: Earth Surface Temperature Data:
+The Global temperature though sounds like a simple idea is a very harder to measure. To extract Earth's temperature, Scientists combine measurements (1)from the air above land, ie.,temperature between the earth' land surface and 1.5 m above(2)the average water temperature of the first few mts below the ocean's temperature. They are collected by ships, buoys and satellites. The daily observations are averaged out over a 30 year period to understand the temperature trend. Any anomalies to the normal observations contribute to evaluating/forecasting the trend in temperature change over time.
+
+#1. Input Data:
+Download "GlobalLandTemperatures".zip from Kaggle's "Climate Change: Earth Surface Temperature Data"
+The downloaded data has 5 csv files, GlobalTemperatures.csv, GlobalLandTemperaturesByCity.csv, GlobalLandTemperaturesByMajorCity.csv, GlobalLandTemperaturesByState.csv, and GlobalLandTemperaturesByCountry.csv
+In this paper, I have limited my study to GlobalTemperatures.csv because this data contain Global Maximum, Minimum and Average Land Temperatures which is of my focus.
+This is a time series data collected over a period of 265 years from 1750 to 2015 and is very interesting to work on, unfolding various angles to research/study. 
+Now lets start on the data.
+
+#2. Installing & Loading required packages
+```{r}
+#install.packages("ggplot2")
+#install.packages("plotly")
+#install.packages('rattle')
+#install.packages('rpart.plot')
+#install.packages('RColorBrewer')
+#install.packages('randomForest')
+#install.packages('party')
+```
+```{r}
+library(ggplot2)
+library(plotly)
+library(reshape2)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+library(randomForest)
+library(party)
+library(forecast)
+library(tseries)
+```
+
+#3.Setting up workspace
+
+```{r}
+setwd("E:\\DataScience\\Kaggle\\Climate")
+getwd()
+```
+#4. Importing Data into workspace & preprocessing
+
+```{r}
+
+gt<- read.csv("GlobalTemperatures.csv")           #importing data from csv format
+str(gt)                                           #Compactly Display The Structure of 'gt'
+```
+Every Temperature column has an accompanying uncertainity temperature as well. When we say Uncertainty of measurement it refers to the margin of doubt that exists about the result of any measurement and it speaks about the  quality of the measured temperature.
+Right here I am focusing on temperature mesurements and have chosen to ignore all the uncertainity columns.
+
+```{r}
+gt<-gt[,-c(3,5,7,9)]        # removing uncertainity temperature columns 3,5 ,7 & 9
+str(gt)
+```
+Now I have 4 temperature columns in my data - The Average, Maximum , Minimum temperatures of Land and an Land and Ocean temperature.
+For us to get to know the nature of each of these 4 temperatures lying inside our data, let us get the aggregate of each column with functions based on the temperature measurement. Please read the inline comments for further explanation on each code
+```{r}
+# Getting an aggregate by the maximum temperatures for "LandMaxTemperature"
+gt.max   <- aggregate(gt[,3], by=list(substr((as.Date(gt$dt)),1,4)), max)
+colnames(gt.max)<-c("Year","LandMaxTemperature")
+
+# Getting an aggregate by the minimum temperatures for "LandMinTemperature"
+gt.min   <- aggregate(gt[,c(4)], by=list(substr((as.Date(gt$dt)),1,4)), min)
+colnames(gt.min)<-c("Year","LandMinTemperature")
+
+# Getting an aggregate by the mean temperatures for "LandAverageTemperature" & " LandAndOceanAverageTemperature"
+gt.mean   <- aggregate(gt[,c(2,5)], by=list(substr((as.Date(gt$dt)),1,4)), mean)
+colnames(gt.mean)<-c("Year","LandAverageTemperature", "LandAndOceanAverageTemperature")
+
+#merging all aggregates columns to create a new data.frame "m"
+m1<-merge(gt.max,gt.min,by = "Year")
+m<-merge(m1,gt.mean,by = "Year")
+summary(m)                              # gives the result summary of the merged file 'm2'
+```
+The summary shows the details of the merged file, from which it is easy to notice the 'NA' values in each. 'NA' values are 'no values' which are missing due to various reasons and this may interfere with the qualtiy of our work. There are definitely numerous ways to sensibly fill in these missing values, but I choose the easiest way to omit them from the data.
+
+```{r}
+#removing all NA values
+m<-na.omit(m)
+summary(m) 
+```
+
+The data is now clear of NA values.
+
+#5. Plotting the columns to get better understanding
+
+Plotting the data will give a good idea on the prevalent temperature over these years and to check if they have a trend.
+```{r}
+theme_update(plot.title = element_text(hjust = 0.5)) # for center justification of all titles in ggplot
+ggplot(data=m, aes(x=Year, y=LandAverageTemperature, fill = LandAverageTemperature))+geom_bar(stat="identity")+ ggtitle("Land Average Temperature 1850-2015")
+```
+```{r}
+ggplot(data=m, aes(x=Year, y=LandAndOceanAverageTemperature, fill = LandAndOceanAverageTemperature))+geom_bar(stat="identity")+ ggtitle("Land and Ocean Average Temperature 1850-2015")
+```
+```{r}
+ggplot(data=m, aes(x=Year, y=LandMaxTemperature, fill = LandMaxTemperature))+geom_bar(stat="identity")+ ggtitle("Land Maximum Temperature 1850-2015")
+```
+```{r}
+ggplot(data=m, aes(x=Year, y=LandMinTemperature, fill = LandMinTemperature))+geom_bar(stat="identity")+ ggtitle("Land Minimum Temperature 1850-2015")
+```
+Seeing these graphs gives a visual understanding on the whole lot of observations lying in there, Also on closer observation, the max, min and average temperature graphs show upward movement which means that the temperatures increasing with time over years. Global warming!!. We cannot conclude just like that, lets view them in different angle - Scatterplots
+
+Having a closer look with Scatterplot to see if it gives more clarity. Its a good idea to have confidence interval plotted around the trend. The confidence interval gives an idea where the plotted points are estimated to lie, giving a strong understanding on the variation in temperature.
+```{r}
+ggplot(m, aes(x= Year, y=LandAverageTemperature))+geom_point(shape= 1)+ geom_smooth(method=lm, color = "red", se=TRUE)+ ggtitle("Scatter plot with confidence interval around the trend\n Land Average Temperature 1850-2015")
+```
+
+```{r}
+ggplot(m, aes(x= Year, y=LandAndOceanAverageTemperature))+geom_point(shape= 1)+ geom_smooth(method=lm, color = "red", se=TRUE)+ ggtitle("Scatter plot with confidence interval around the trend\n Land and Ocean Average Temperature 1850-2015")
+```
+```{r}
+ggplot(m, aes(x= Year, y=LandMaxTemperature))+geom_point(shape= 1)+ geom_smooth(method=lm, color = "red", se=TRUE)+ ggtitle("Scatter plot with confidence interval around the trend\n Land Maximum Temperature 1850-2015")
+```
+```{r}
+ggplot(m, aes(x= Year, y=LandMinTemperature))+geom_point(shape= 1)+ geom_smooth(method=lm, color = "red", se=TRUE)+ ggtitle("Scatter plot with confidence interval around the trend\n Land Minimum Temperature 1850-2015")
+```
+
+#Viewing all the Temperatures together
+```{r}
+x<- c("LandMinTemperature", "LandAverageTemperature","LandAndOceanAverageTemperature",  "LandMaxTemperature")
+y<- as.formula(paste(paste(x, collapse="+"), "~Year"))
+lattice::xyplot(y, data = m, type = "l")
+```
+
+```{r}
+#The melt function takes data in wide format and stacks a set of columns into a single column of data
+gtmelt<-melt(m, id.vars = 'Year')
+ggplot(gtmelt, aes(x=Year, y=value,fill=variable))+geom_bar(stat='identity')
+```
+
+#Modelling the prediction:
+HAving seen the data how it seems to show a trend of increase with respect to years, I am going to proceed to model the data to predict the future taking into account the evidence of past observations.
+I have taken tremendous help from these excellent material on data forecasting.
+https://www.datascience.com/blog/introduction-to-forecasting-with-arima-in-r-learn-data-science-tutorials.
+http://a-little-book-of-r-for-time-series.readthedocs.io/en/latest/src/timeseries.html
+
+#Training and test data
+
+Initially I had problem in understanding why at all we need to divide the data into 'train' and 'test' data? why cant we just work with the entire data? There is a brilliant reason behind it. Our observations of the present and past data is going to be a reasonable representation of the data we expect to have in future, this concept becomes the basis of forecasting. Now how/on what basis will we confirm that our predictive models are right? To ensure our prediction has worked right we split the data randomly into 'train' and 'test', where we assume 'train' represents present & past while test is 'future'. With 'train' data as input, predictive modelling is run and its evaluated on 'test'. The modelled test data when compared with the original data will reveal the accuracy of our forecast. Hope its clear. If more explanation needed I found a very good explanation here. http://info.salford-systems.com/blog/bid/337783/Why-Data-Scientists-Split-Data-into-Train-and-Test
+
+I have done a random 70:30 split in "AverageLandTemperatures"" data set (70% will be for training models, 30% to evaluate them (test).
+```{r}
+n = nrow(m)
+mindex = sample(1:n, size = round(0.7*n), replace = FALSE) #pick random 70% samples
+train = m[mindex , ]                                       #test data
+test = m[-mindex ,]                                        #test data
+nrow(train)                                                #to check numer of rows in train data
+nrow(test)                                                 #to check numer of rows in test data
+#set.seed can be any number, it just makes sure the results are reproduced every next time, else the classifications may differ each time.
+set.seed(415)
+#Creating a new dataframe with train and test data using group
+group <- rep(NA,166)
+group <- ifelse(seq(1,166) %in% mindex,"Train","Test")
+groupdf<- data.frame(Year=m$Year,Temperature=m$LandAverageTemperature,group)
+summary(groupdf)
+```
+#Plotting Original Data
+
+```{r}
+
+
+#Plotting the original data of LandAverageTemperature
+ggplot(m,aes(x=m$Year,y=m$LandAverageTemperature,color="red"))+geom_point()
+```
+#Plotting 'train' and 'test' data with different colours
+```{r}
+#Plotting the train\train data of LandAverageTemperature
+ggplot(m,aes(x = Year,y = groupdf$Temperature, color = group)) + geom_point() +
+  scale_color_discrete(name="") + theme(legend.position="right")
+```
+#Predicting temperatures using RandomForest:
+Random forests (random decision forests) are an ensemble learning method for classification, regression and other tasks, that operate by constructing a multitude of decision trees. 
+Ensemble methods are learning algorithms that construct a set of classifiers and then classify new data points by taking a (weighted) vote of their predictions.
+```{r}
+fitLAT<-randomForest(LandAverageTemperature~Year+LandMinTemperature+LandMaxTemperature+LandAndOceanAverageTemperature,
+                     data = train,
+                     importance = TRUE,
+                     tree = 2000)
+```
+# Predictor ranking: based on the contribution variables play in predicting the data 
+
+```{r}
+varImpPlot(fitLAT)
+```
+The above plot gives an understanding that 'Land and Ocean temperature' values have a highest impact on the results, so is the 'Year' data. These both are high contribution predictors in 'LandAverageTemperature'values
+
+#RandomForest Prediction
+
+```{r}
+PredictionrfLAT<- predict(fitLAT,test)
+Result.rfLAT<- data.frame(Year = test$Year, LandAverageTemperature = PredictionrfLAT)
+# Plotting the Predicted test data
+ggplot(Result.rfLAT,aes(x=Result.rfLAT$Year,y=Result.rfLAT$LandAverageTemperature,color="black"))+geom_point()
+```
+#Evaluation of Random Forest prediction:
+
+To check/compare forecasting errors we use the Root Mean Squared Errors (RMSE) as a measure of accuracy. The Mean Squared Error (MSE) is a measure of the average squares of the errors. In other words it measures the difference between the estimated values and the observed values.
+The RMSE is simply the square root of the MSE which can be easier to interpret since it has the same units as the quantity being estimate
+
+```{r}
+
+RMSE.PredictionrfLAT<-sqrt(mean((PredictionrfLAT-test$LandAverageTemperature)^2))
+RMSE.PredictionrfLAT
+MAE.PredictionrfLAT <- mean(abs(PredictionrfLAT-test$LandAverageTemperature))
+MAE.PredictionrfLAT
+```
+Good accuracy results, but before we finalise its a good idea to parctice check on few more models.
+
+#Prediction using cforest:
+
+cforest is an other ensemble model giving conditional inference trees and comes with 'party' package
+```{r}
+library(party)
+set.seed(415)
+fitcf<-cforest(LandAverageTemperature~Year+LandMinTemperature+LandMaxTemperature+LandAndOceanAverageTemperature,
+              data = train,
+              controls=cforest_unbiased(ntree=2000,mtry=3))
+PredictionOOB<- predict(fitcf,test,OOB=TRUE, type = "response")
+Result.cfLAT<- data.frame(Year = test$Year, LandAverageTemperature = PredictionOOB)
+#Plot results
+ggplot(Result.cfLAT,aes(x=Result.cfLAT$Year,y=Result.cfLAT$LandAverageTemperature,color="black"))+geom_point()
+```
+#Evaluating cForest Prediction:
+
+```{r}
+
+RMSE.PredictionOOB<-sqrt(mean((PredictionOOB-test$LandAverageTemperature)^2))
+RMSE.PredictionOOB
+MAE.PredictionOOB <- mean(abs(PredictionOOB-test$LandAverageTemperature))
+MAE.PredictionOOB
+```
+
+Random forest has given better prediction results with respect to cforest. 
+
+
+References:
+
+http://trevorstephens.com/kaggle-titanic-tutorial/
+https://www.datascience.com/blog/introduction-to-forecasting-with-arima-in-r-learn-data-science-tutorials
+https://campus.datacamp.com/courses/arima-modeling-with-r
+http://a-little-book-of-r-for-time-series.readthedocs.io/en/latest/src/timeseries.html
+https://www.r-bloggers.com/part-4a-modelling-predicting-the-amount-of-rain/
+ARPN Journal of Engineering and Applied Sciences on FORECASTING OF MONTHLY TEMPERATURE VARIATIONS USING RANDOM FORESTS, by Wai Yan Nyein Naing and Zaw Zaw Htike.
+https://www.carbonbrief.org/explainer-how-do-scientists-measure-global-temperature
+http://www.odlt.org/dcd/ballast/global_surface_temperature.html
